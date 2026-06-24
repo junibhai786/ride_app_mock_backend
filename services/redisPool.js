@@ -1,19 +1,14 @@
 const Redis = require('ioredis');
 require('dotenv').config();
 
-const makeClient = () => {
-  const client = process.env.REDIS_URL
-    ? new Redis(process.env.REDIS_URL, { retryStrategy: (t) => Math.min(t * 50, 2000) })
-    : new Redis({
-        host: process.env.REDIS_HOST || 'localhost',
-        port: parseInt(process.env.REDIS_PORT || '6379', 10),
-        retryStrategy: (t) => Math.min(t * 50, 2000),
-      });
-  client.on('error', (err) => console.error('Redis error:', err.message));
-  return client;
-};
+let pubClient = null;
+let subClient = null;
 
-const pubClient = makeClient();
-const subClient = pubClient.duplicate();
+if (process.env.REDIS_URL) {
+  pubClient = new Redis(process.env.REDIS_URL);
+  pubClient.on('error', (err) => console.error('Redis pub error:', err.message));
+  subClient = pubClient.duplicate();
+  subClient.on('error', (err) => console.error('Redis sub error:', err.message));
+}
 
 module.exports = { pubClient, subClient };
