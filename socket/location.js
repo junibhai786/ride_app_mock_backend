@@ -2,7 +2,12 @@ const { createAdapter } = require('@socket.io/redis-adapter');
 const { pubClient, subClient } = require('../services/redisPool');
 
 module.exports = (io) => {
-  io.adapter(createAdapter(pubClient, subClient));
+  if (process.env.REDIS_URL || process.env.REDIS_HOST) {
+    io.adapter(createAdapter(pubClient, subClient));
+    console.log('Socket.io using Redis adapter');
+  } else {
+    console.log('Socket.io using in-memory adapter (no Redis configured)');
+  }
 
   io.on('connection', (socket) => {
     console.log(`User connected: ${socket.id}`);
