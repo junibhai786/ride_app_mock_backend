@@ -10,6 +10,7 @@ const PORT = process.env.PORT || 3000; // Set the server port from environment v
 const LIVE_URL = process.env.LIVE_URL || 'https://welcoming-mindfulness-production-539a.up.railway.app'; // Set the production URL
 
 // ── Middleware ────────────────────────────────────────────────────────────────
+app.set('trust proxy', 1); // Trust Railway's reverse proxy for rate limiting
 app.use(cors()); // Enable CORS for all routes
 app.use(express.json()); // Enable parsing of JSON request bodies
 
