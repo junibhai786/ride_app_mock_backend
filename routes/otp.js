@@ -8,10 +8,19 @@ const router = express.Router();
 const otpStore = new Map();
 
 const OTP_TTL_MS = 5 * 60 * 1000; // OTP expires after 5 minutes
+const OTP_LENGTH = parseInt(process.env.OTP_LENGTH, 10) || 4;
+const FIXED_OTP = process.env.FIXED_OTP || null; // set env var for a static fallback OTP
 
-/** Generate a random 4-digit OTP */
+/** Generate a random N-digit OTP, or use FIXED_OTP if set */
 function generateOtp() {
-  return Math.floor(1000 + Math.random() * 9000).toString();
+  if (FIXED_OTP) return FIXED_OTP.toString();
+  try {
+    const min = Math.pow(10, OTP_LENGTH - 1);
+    const max = Math.pow(10, OTP_LENGTH) - 1;
+    return (Math.floor(Math.random() * (max - min + 1)) + min).toString();
+  } catch {
+    return '1234'; // last-resort fallback
+  }
 }
 
 /** Validate Pakistani mobile number format (03XXXXXXXXX or +923XXXXXXXXX) */

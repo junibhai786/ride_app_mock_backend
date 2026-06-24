@@ -5,10 +5,23 @@ const otpRoutes = require('./routes/otp');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const LIVE_URL = process.env.LIVE_URL || 'https://welcoming-mindfulness-production-539a.up.railway.app';
 
 // ── Middleware ────────────────────────────────────────────────────────────────
 app.use(cors());
 app.use(express.json());
+
+// Response logger
+app.use((req, res, next) => {
+  const start = Date.now();
+  const originalJson = res.json.bind(res);
+  res.json = (body) => {
+    const ms = Date.now() - start;
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} ${res.statusCode} ${ms}ms`, JSON.stringify(body));
+    return originalJson(body);
+  };
+  next();
+});
 
 // Limit each IP to 10 OTP requests per 15 minutes
 const otpLimiter = rateLimit({
@@ -31,4 +44,5 @@ app.use((req, res) => {
 
 app.listen(PORT, () => {
   console.log(`RideApp OTP API running on port ${PORT}`);
+  console.log(`Live URL: ${LIVE_URL}`);
 });
