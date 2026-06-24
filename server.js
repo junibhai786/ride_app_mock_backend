@@ -1,48 +1,68 @@
-const express = require('express');
-const cors = require('cors');
-const rateLimit = require('express-rate-limit');
-const otpRoutes = require('./routes/otp');
+const express = require('express'); // Import the Express framework
+const cors = require('cors'); // Import the CORS middleware to allow cross-origin requests
+const rateLimit = require('express-rate-limit'); // Import the rate limiting middleware
+const otpRoutes = require('./routes/otp'); // Import the OTP routes from the local routes directory
+const heatmapRoutes = require('./routes/heatmap');
+const ridesRoutes = require('./routes/rides');
 
-const app = express();
-const PORT = process.env.PORT || 3000;
-const LIVE_URL = process.env.LIVE_URL || 'https://welcoming-mindfulness-production-539a.up.railway.app';
+const app = express(); // Initialize a new Express application
+const PORT = process.env.PORT || 3000; // Set the server port from environment variable or default to 3000
+const LIVE_URL = process.env.LIVE_URL || 'https://welcoming-mindfulness-production-539a.up.railway.app'; // Set the production URL
 
 // ── Middleware ────────────────────────────────────────────────────────────────
-app.use(cors());
-app.use(express.json());
+app.use(cors()); // Enable CORS for all routes
+app.use(express.json()); // Enable parsing of JSON request bodies
 
 // Response logger
-app.use((req, res, next) => {
-  const start = Date.now();
-  const originalJson = res.json.bind(res);
-  res.json = (body) => {
-    const ms = Date.now() - start;
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} ${res.statusCode} ${ms}ms`, JSON.stringify(body));
-    return originalJson(body);
-  };
-  next();
-});
+app.use((req, res, next) => { // Define a custom middleware for logging requests and responses
+  const start = Date.now(); // Record the start time of the request
+  const originalJson = res.json.bind(res); // Store the original res.json method
+  res.json = (body) => { // Override the res.json method to log the response
+    const ms = Date.now() - start; // Calculate the time taken to process the request
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} ${res.statusCode} ${ms}ms`, JSON.stringify(body)); // Log request details and response body
+    return originalJson(body); // Call the original res.json method with the body
+  }; // End of res.json override
+  next(); // Pass control to the next middleware
+}); // End of custom logging middleware
 
 // Limit each IP to 10 OTP requests per 15 minutes
-const otpLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  message: { success: false, message: 'Too many requests. Try again later.' },
-});
+const otpLimiter = rateLimit({ // Configure the rate limiter for OTP endpoints
+  windowMs: 15 * 60 * 1000, // Define the time window of 15 minutes
+  max: 10, // Limit each IP to 10 requests per windowMs
+  message: { success: false, message: 'Too many requests. Try again later.' }, // Error message when limit is exceeded
+}); // End of rate limiter configuration
 
 // ── Routes ────────────────────────────────────────────────────────────────────
-app.get('/health', (req, res) => {
-  res.json({ status: 'OK', uptime: process.uptime() });
-});
+app.get('/health', (req, res) => { // Define a health check route
+  res.json({ status: 'OK', uptime: process.uptime() }); // Return the status and uptime of the process
+}); // End of health check route
 
-app.use('/api/otp', otpLimiter, otpRoutes);
+app.use('/api/otp', otpLimiter, otpRoutes); // Mount the OTP routes at /api/otp with rate limiting applied
+app.use('/api/heatmap', heatmapRoutes);
+app.use('/api/rides', ridesRoutes);
 
 // 404 handler
-app.use((req, res) => {
-  res.status(404).json({ success: false, message: 'Route not found' });
+app.use((req, res) => { // Define a catch-all middleware for handling undefined routes
+  res.status(404).json({ success: false, message: 'Route not found' }); // Return a 404 status and error message
+}); // End of 404 handler
+
+const http = require('http');
+const { Server } = require('socket.io');
+
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
 });
 
-app.listen(PORT, () => {
-  console.log(`RideApp OTP API running on port ${PORT}`);
+// Initialize Socket logic
+require('./socket/location')(io);
+
+// ... existing routes ...
+
+server.listen(PORT, () => {
+  console.log(`RideApp API running on port ${PORT}`);
   console.log(`Live URL: ${LIVE_URL}`);
 });

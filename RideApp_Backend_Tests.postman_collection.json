@@ -1,0 +1,232 @@
+{
+	"info": {
+		"_postman_id": "ride-sharing-mock-backend",
+		"name": "Ride-Sharing Mock Backend",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Google Maps - Real-Time Tracking",
+			"item": [
+				{
+					"name": "Note",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "Use Socket.io client to test this. Events: 'update-location' and 'location-updated'"
+						},
+						"description": "Connect to the server via Socket.io.\n\nDriver phone:\n  emit('join', { role: 'driver', id: 1 })\n  emit('update-location', { driverId: 1, lat: 24.8607, lng: 67.0011 })  // every 2-3s\n\nPassenger phone:\n  emit('join', { role: 'passenger', id: 1 })\n  emit('start-tracking', { driverId: 1 })\n  on('location-updated', (data) => updateMapMarker(data))\n\nThe passenger immediately receives the last cached location from Redis on 'start-tracking', then live updates as the driver moves."
+					}
+				}
+			]
+		},
+		{
+			"name": "2. Heatmap - Demand Zones",
+			"item": [
+				{
+					"name": "Seed Dummy Data (Karachi)",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{BASE_URL}}/api/heatmap/seed",
+							"host": ["{{BASE_URL}}"],
+							"path": ["api", "heatmap", "seed"]
+						},
+						"description": "Bulk-inserts 500 rides in a single SQL statement. Optional query params: ?count=500&lat=24.8607&lng=67.0011"
+					}
+				},
+				{
+					"name": "Get Heatmap Data",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{BASE_URL}}/api/heatmap/data?precision=3",
+							"host": ["{{BASE_URL}}"],
+							"path": ["api", "heatmap", "data"],
+							"query": [{ "key": "precision", "value": "3" }]
+						},
+						"description": "precision=3 → ~100m grid cells (good for city view). precision=4 → ~10m (street view)."
+					}
+				}
+			]
+		},
+		{
+			"name": "3. Bidding System (Race Condition Demo)",
+			"item": [
+				{
+					"name": "Step 1 – Create Ride Request",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const json = pm.response.json();",
+									"if (json.success) {",
+									"    pm.collectionVariables.set('RIDE_ID', json.ride.id);",
+									"    pm.collectionVariables.set('BID_ID_1', '');",
+									"    pm.collectionVariables.set('BID_ID_2', '');",
+									"    console.log('Ride created: ID =', json.ride.id);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"passengerId\": 1,\n    \"pickup\": { \"lat\": 24.8607, \"lng\": 67.0011 },\n    \"destination\": { \"lat\": 24.8800, \"lng\": 67.0200 }\n}"
+						},
+						"url": {
+							"raw": "{{BASE_URL}}/api/rides/request",
+							"host": ["{{BASE_URL}}"],
+							"path": ["api", "rides", "request"]
+						}
+					}
+				},
+				{
+					"name": "Step 2a – Place Bid (Driver 101, PKR 1007)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const json = pm.response.json();",
+									"if (json.success) {",
+									"    pm.collectionVariables.set('BID_ID_1', json.bid.id);",
+									"    console.log('Bid 1 placed: ID =', json.bid.id);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"driverId\": 101,\n    \"amount\": 1007\n}"
+						},
+						"url": {
+							"raw": "{{BASE_URL}}/api/rides/{{RIDE_ID}}/bid",
+							"host": ["{{BASE_URL}}"],
+							"path": ["api", "rides", "{{RIDE_ID}}", "bid"]
+						}
+					}
+				},
+				{
+					"name": "Step 2b – Place Bid (Driver 102, PKR 1098)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const json = pm.response.json();",
+									"if (json.success) {",
+									"    pm.collectionVariables.set('BID_ID_2', json.bid.id);",
+									"    console.log('Bid 2 placed: ID =', json.bid.id);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"driverId\": 102,\n    \"amount\": 1098\n}"
+						},
+						"url": {
+							"raw": "{{BASE_URL}}/api/rides/{{RIDE_ID}}/bid",
+							"host": ["{{BASE_URL}}"],
+							"path": ["api", "rides", "{{RIDE_ID}}", "bid"]
+						}
+					}
+				},
+				{
+					"name": "Step 3 – Get All Bids",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{BASE_URL}}/api/rides/{{RIDE_ID}}/bids",
+							"host": ["{{BASE_URL}}"],
+							"path": ["api", "rides", "{{RIDE_ID}}", "bids"]
+						},
+						"description": "Mobile polls this to show the offer list to the passenger."
+					}
+				},
+				{
+					"name": "Step 4 – Accept Bid 1 (Race Condition Test)",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"bidId\": {{BID_ID_1}}\n}"
+						},
+						"url": {
+							"raw": "{{BASE_URL}}/api/rides/{{RIDE_ID}}/accept-bid",
+							"host": ["{{BASE_URL}}"],
+							"path": ["api", "rides", "{{RIDE_ID}}", "accept-bid"]
+						},
+						"description": "Send this AND 'Accept Bid 2' simultaneously from two Postman tabs.\nOnly one will return {success: true}. The other returns 'Ride already accepted or finished'.\nThis proves PostgreSQL SELECT FOR UPDATE prevents double-accept."
+					}
+				},
+				{
+					"name": "Step 4 – Accept Bid 2 (Race Condition Test)",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"bidId\": {{BID_ID_2}}\n}"
+						},
+						"url": {
+							"raw": "{{BASE_URL}}/api/rides/{{RIDE_ID}}/accept-bid",
+							"host": ["{{BASE_URL}}"],
+							"path": ["api", "rides", "{{RIDE_ID}}", "accept-bid"]
+						}
+					}
+				},
+				{
+					"name": "Step 5 – Verify Ride Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{BASE_URL}}/api/rides/{{RIDE_ID}}",
+							"host": ["{{BASE_URL}}"],
+							"path": ["api", "rides", "{{RIDE_ID}}"]
+						},
+						"description": "Confirms the ride is now 'accepted' and driver_id is set. Bids endpoint will show one 'accepted' and one 'rejected'."
+					}
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": { "type": "text/javascript", "exec": [""] }
+		},
+		{
+			"listen": "test",
+			"script": { "type": "text/javascript", "exec": [""] }
+		}
+	],
+	"variable": [
+		{ "key": "BASE_URL", "value": "http://localhost:3000", "type": "string" },
+		{ "key": "RIDE_ID", "value": "", "type": "string" },
+		{ "key": "BID_ID_1", "value": "", "type": "string" },
+		{ "key": "BID_ID_2", "value": "", "type": "string" }
+	]
+}
