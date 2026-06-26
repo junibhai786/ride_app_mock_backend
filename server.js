@@ -4,6 +4,7 @@ const rateLimit = require('express-rate-limit'); // Import the rate limiting mid
 const otpRoutes = require('./routes/otp'); // Import the OTP routes from the local routes directory
 const heatmapRoutes = require('./routes/heatmap');
 const ridesRoutes = require('./routes/rides');
+const driversRoutes = require('./routes/drivers');
 
 const app = express(); // Initialize a new Express application
 const PORT = process.env.PORT || 3000; // Set the server port from environment variable or default to 3000
@@ -41,6 +42,7 @@ app.get('/health', (req, res) => { // Define a health check route
 app.use('/api/otp', otpLimiter, otpRoutes); // Mount the OTP routes at /api/otp with rate limiting applied
 app.use('/api/heatmap', heatmapRoutes);
 app.use('/api/rides', ridesRoutes);
+app.use('/api/drivers', driversRoutes);
 
 // 404 handler
 app.use((req, res) => { // Define a catch-all middleware for handling undefined routes
@@ -100,6 +102,14 @@ async function runMigrations() {
     CREATE INDEX IF NOT EXISTS idx_rides_pickup ON rides(pickup_lat, pickup_lng);
     CREATE INDEX IF NOT EXISTS idx_bids_ride_id ON bids(ride_id);
   `);
+  // Seed test driver if table is empty
+  const driverCount = await db.query('SELECT COUNT(*) FROM drivers');
+  if (parseInt(driverCount.rows[0].count) === 0) {
+    await db.query(
+      "INSERT INTO drivers (name, status, last_lat, last_lng) VALUES ('Ahmed Ali', 'online', 31.5204, 74.3587)"
+    );
+    console.log('Seeded test driver: Ahmed Ali (ID: 1, phone: 03001234567)');
+  }
   console.log('Database migrations applied');
 }
 
