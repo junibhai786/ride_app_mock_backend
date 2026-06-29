@@ -15,7 +15,8 @@
       "Bash(curl -sf https://welcoming-mindfulness-production-539a.up.railway.app/health)",
       "Bash(curl -s -X POST https://welcoming-mindfulness-production-539a.up.railway.app/api/otp/send -H \"Content-Type: application/json\" -d '{\"phone\":\"03001234567\"}')",
       "Bash(find /Users/aizaz/StudioProjects -name \"pubspec.yaml\" -maxdepth 3 2>/dev/null)",
-      "Read(//Users/aizaz/StudioProjects/**)"
+      "Read(//Users/aizaz/StudioProjects/**)",
+      "Bash(railway logs *)"
     ],
     "additionalDirectories": [
       "/Users/aizaz/StudioProjects/ride_app_mock/lib/providers"

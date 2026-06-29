@@ -1,12 +1,12 @@
 const { Pool } = require('pg');
-require('dotenv').config();
+const env = require('../config/env'); // Use the central env module so dotenv is loaded once.
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  connectionString: env.databaseUrl, // Connect to the configured PostgreSQL database.
+  ssl: env.nodeEnv === 'production' ? { rejectUnauthorized: false } : false, // Enable Railway/production SSL without local SSL friction.
 });
 
 module.exports = {
-  query: (text, params) => pool.query(text, params),
-  pool
+  query: (text, params) => pool.query(text, params), // Expose a simple query helper for model files.
+  pool, // Expose the pool for transaction clients in services.
 };

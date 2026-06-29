@@ -1,105 +1,50 @@
-const db = require('./db');
+const db = require('./db'); // Import the shared PostgreSQL pool for transaction control.
+const rideModel = require('../models/rideModel'); // Import ride persistence operations.
+const bidModel = require('../models/bidModel'); // Import bid persistence operations.
 
-/**
- * 3. inDrive-style Offer Fare / Bidding System
- * Goal: Prevent double-accept using PostgreSQL transactions + Row Locking.
- */
 class RideService {
-    /**
-     * Driver sends an offer for a ride.
-     */
-    async placeBid(rideId, driverId, amount) {
-        const query = `
-            INSERT INTO bids (ride_id, driver_id, amount, status)
-            VALUES ($1, $2, $3, 'pending')
-            ON CONFLICT (ride_id, driver_id) DO UPDATE SET amount = $3
-            RETURNING *
-        `;
-        const result = await db.query(query, [rideId, driverId, amount]);
-        return result.rows[0];
+  async placeBid(rideId, driverId, amount) {
+    return bidModel.upsertBid(rideId, driverId, amount); // Save or update a driver's bid for the ride.
+  }
+
+  async acceptBid(rideId, bidId) {
+    const client = await db.pool.connect(); // Borrow a dedicated client so every query uses the same transaction.
+
+    try {
+      await client.query('BEGIN'); // Start a transaction before locking ride and bid rows.
+
+      const ride = await rideModel.findByIdForUpdate(client, rideId); // Lock the ride row to prevent double acceptance.
+      if (!ride) throw new Error('Ride not found'); // Stop when the ride does not exist.
+      if (ride.status !== 'pending') throw new Error('Ride already accepted or finished'); // Stop when another accept already won.
+
+      const bid = await bidModel.findByIdForUpdate(client, bidId, rideId); // Lock the chosen bid inside the same transaction.
+      if (!bid) throw new Error('Bid not found'); // Stop when the bid does not belong to this ride.
+
+      await rideModel.acceptRide(client, rideId, bid.driver_id); // Assign the ride to the bid's driver.
+      await bidModel.markAccepted(client, bidId); // Mark the selected bid as accepted.
+      await bidModel.rejectOtherBids(client, rideId, bidId); // Mark all competing bids as rejected.
+
+      await client.query('COMMIT'); // Commit all state changes atomically.
+      return { success: true, rideId, driverId: bid.driver_id }; // Return the winning assignment.
+    } catch (error) {
+      await client.query('ROLLBACK'); // Undo partial changes when any step fails.
+      throw error; // Let the controller convert the business error to HTTP JSON.
+    } finally {
+      client.release(); // Return the database client to the pool.
     }
+  }
 
-    /**
-     * Accept a bid (Race Condition Critical).
-     * Uses SELECT ... FOR UPDATE to lock the ride row during the transaction.
-     */
-    async acceptBid(rideId, bidId) {
-        const client = await db.pool.connect();
-        try {
-            await client.query('BEGIN');
+  async getRide(rideId) {
+    return rideModel.findById(rideId); // Load one ride through the model layer.
+  }
 
-            // 1. Lock the ride row to prevent other drivers from accepting until this is done.
-            // This is the core solution to the "double-accept" problem.
-            const rideResult = await client.query(
-                'SELECT * FROM rides WHERE id = $1 FOR UPDATE',
-                [rideId]
-            );
-            
-            const ride = rideResult.rows[0];
-            if (!ride) throw new Error('Ride not found');
-            if (ride.status !== 'pending') throw new Error('Ride already accepted or finished');
+  async getBids(rideId) {
+    return bidModel.findByRideId(rideId); // Load all bids through the model layer.
+  }
 
-            // 2. Lock the specific bid
-            const bidResult = await client.query(
-                'SELECT * FROM bids WHERE id = $1 AND ride_id = $2 FOR UPDATE',
-                [bidId, rideId]
-            );
-            const bid = bidResult.rows[0];
-            if (!bid) throw new Error('Bid not found');
-
-            // 3. Update ride status and assign driver
-            await client.query(
-                'UPDATE rides SET status = $1, driver_id = $2, accepted_at = NOW() WHERE id = $3',
-                ['accepted', bid.driver_id, rideId]
-            );
-
-            // 4. Update the accepted bid status
-            await client.query(
-                'UPDATE bids SET status = $1 WHERE id = $2',
-                ['accepted', bidId]
-            );
-
-            // 5. Reject all other bids for this ride
-            await client.query(
-                'UPDATE bids SET status = $1 WHERE ride_id = $2 AND id != $3',
-                ['rejected', rideId, bidId]
-            );
-
-            await client.query('COMMIT');
-            return { success: true, rideId, driverId: bid.driver_id };
-        } catch (error) {
-            await client.query('ROLLBACK');
-            throw error;
-        } finally {
-            client.release();
-        }
-    }
-
-    async getRide(rideId) {
-        const result = await db.query('SELECT * FROM rides WHERE id = $1', [rideId]);
-        return result.rows[0] || null;
-    }
-
-    async getBids(rideId) {
-        const result = await db.query(
-            'SELECT * FROM bids WHERE ride_id = $1 ORDER BY amount ASC',
-            [rideId]
-        );
-        return result.rows;
-    }
-
-    /**
-     * Create a new ride request
-     */
-    async createRide(passengerId, pickup, destination) {
-        const query = `
-            INSERT INTO rides (passenger_id, pickup_lat, pickup_lng, destination_lat, destination_lng, status)
-            VALUES ($1, $2, $3, $4, $5, 'pending')
-            RETURNING *
-        `;
-        const result = await db.query(query, [passengerId, pickup.lat, pickup.lng, destination.lat, destination.lng]);
-        return result.rows[0];
-    }
+  async createRide(passengerId, pickup, destination) {
+    return rideModel.createRide(passengerId, pickup, destination); // Create a pending ride through the model layer.
+  }
 }
 
-module.exports = new RideService();
+module.exports = new RideService(); // Export one service instance for controllers.

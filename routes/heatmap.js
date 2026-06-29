@@ -1,30 +1,9 @@
-const express = require('express');
-const router = express.Router();
-const heatmapService = require('../services/heatmapService');
+const express = require('express'); // Import Express to create a scoped router.
+const heatmapController = require('../controllers/heatmapController'); // Import heatmap controller actions.
 
-// Get heatmap aggregated data
-router.get('/data', async (req, res) => {
-    try {
-        const precision = parseInt(req.query.precision) || 2;
-        const data = await heatmapService.getHeatmapData(precision);
-        res.json({ success: true, data });
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
+const router = express.Router(); // Create a router for /api/heatmap endpoints.
 
-// Seed dummy data for testing — single bulk INSERT, not 500 round-trips
-router.post('/seed', async (req, res) => {
-    try {
-        // Karachi center (24.8607, 67.0011); override via ?lat=&lng=&count=
-        const count = parseInt(req.query.count) || 500;
-        const centerLat = parseFloat(req.query.lat) || 24.8607;
-        const centerLng = parseFloat(req.query.lng) || 67.0011;
-        await heatmapService.seedRides(count, centerLat, centerLng);
-        res.json({ success: true, message: `Inserted ${count} dummy rides around (${centerLat}, ${centerLng})` });
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-});
+router.get('/data', heatmapController.getHeatmapData); // Return aggregated heatmap demand/supply data.
+router.post('/seed', heatmapController.seedRides); // Insert demo ride data for testing heatmap output.
 
-module.exports = router;
+module.exports = router; // Export the router so config/app can mount it.
