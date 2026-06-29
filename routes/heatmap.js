@@ -5,7 +5,7 @@ const heatmapService = require('../services/heatmapService');
 // Get heatmap aggregated data
 router.get('/data', async (req, res) => {
     try {
-        const precision = parseInt(req.query.precision) || 3;
+        const precision = parseInt(req.query.precision) || 2;
         const data = await heatmapService.getHeatmapData(precision);
         res.json({ success: true, data });
     } catch (error) {
